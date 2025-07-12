@@ -2,7 +2,12 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Brain, Users, MessageSquare, Trophy, Sparkles, Code, Lightbulb } from 'lucide-react';
 
-export const HeroSection: React.FC = () => {
+interface HeroSectionProps {
+  onStartExploring?: () => void;
+  onViewQuestions?: () => void;
+}
+
+export const HeroSection: React.FC<HeroSectionProps> = ({ onStartExploring, onViewQuestions }) => {
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-[#1f0d38] via-[#2d1b4e] to-[#1f0d38] text-white py-20 px-4 min-h-screen flex items-center">
       {/* Animated Background Pattern */}
@@ -85,7 +90,7 @@ export const HeroSection: React.FC = () => {
                 </span>
               </h2>
               <p className="text-xl text-purple-200 mb-8 leading-relaxed">
-                Join the most vibrant community of developers, designers, and innovators. 
+                Join the most vibrant community of developers, designers, and innovators.
                 Get instant answers, share breakthrough insights, and accelerate your learning journey.
               </p>
             </motion.div>
@@ -119,11 +124,17 @@ export const HeroSection: React.FC = () => {
               transition={{ delay: 0.6 }}
               className="flex gap-4"
             >
-              <button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-purple-500/25 flex items-center gap-2">
+              <button
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-purple-500/25 flex items-center gap-2"
+                onClick={onStartExploring}
+              >
                 <Lightbulb className="w-5 h-5" />
                 Start Exploring
               </button>
-              <button className="border-2 border-purple-400 text-purple-300 hover:bg-purple-400 hover:text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 flex items-center gap-2">
+              <button
+                className="border-2 border-purple-400 text-purple-300 hover:bg-purple-400 hover:text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 flex items-center gap-2"
+                onClick={onViewQuestions}
+              >
                 <Code className="w-5 h-5" />
                 View Questions
               </button>

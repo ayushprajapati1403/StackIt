@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Brain } from 'lucide-react';
 import { HeroSection } from './components/HeroSection';
@@ -14,8 +14,7 @@ import { NotificationsPage } from './components/NotificationsPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { LoginPage } from './components/LoginPage';
 import { SignupPage } from './components/SignupPage';
-import { mockQuestions, availableTags } from './data/mockData';
-import { logout } from './api/auth';
+import { fetchTags } from './api/tags';
 import { fetchQuestions } from './api/questions';
 
 function App() {
@@ -26,6 +25,8 @@ function App() {
   const [questions, setQuestions] = useState<any[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const [availableTags, setAvailableTags] = useState<any[]>([]);
+  const questionsSectionRef = useRef<HTMLDivElement>(null);
 
   const filteredQuestions = useMemo(() => {
     return questions.filter(question => {
@@ -76,6 +77,13 @@ function App() {
     setCurrentPage('signup');
   };
 
+  const handleStartExploring = () => setCurrentPage('ask');
+  const handleViewQuestions = () => {
+    if (questionsSectionRef.current) {
+      questionsSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && !user) {
@@ -108,6 +116,12 @@ function App() {
       })
       .catch(() => setQuestions([]))
       .finally(() => setLoadingQuestions(false));
+  }, []);
+
+  useEffect(() => {
+    fetchTags()
+      .then(data => setAvailableTags(data.map((t: any) => t.name || t)))
+      .catch(() => setAvailableTags([]));
   }, []);
 
   // Show login page
@@ -186,7 +200,7 @@ function App() {
           onSignup={navigateToSignup}
           onLogout={handleLogout}
         />
-        <UserProfilePage />
+        <UserProfilePage setCurrentPage={setCurrentPage} />
       </div>
     );
   }
@@ -227,10 +241,10 @@ function App() {
       {user ? (
         <>
           {/* Hero Section */}
-          <HeroSection />
+          <HeroSection onStartExploring={handleStartExploring} onViewQuestions={handleViewQuestions} />
 
           {/* Main Content */}
-          <main className="max-w-6xl mx-auto px-4 py-8">
+          <main ref={questionsSectionRef} className="max-w-6xl mx-auto px-4 py-8">
             {/* Search Section */}
             <motion.div
               className="mb-8"

@@ -13,8 +13,7 @@ router.get('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: A
 	try {
 		const notifications = await prisma.notification.findMany({
 			where: {
-				userId,
-				isRead: false
+				userId
 			},
 			orderBy: {
 				createdAt: 'desc'

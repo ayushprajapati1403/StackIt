@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Home, 
-  ChevronRight, 
+import {
   Rocket,
   Brain,
   Code,
@@ -12,6 +10,7 @@ import {
   Search
 } from 'lucide-react';
 import { WYSIWYGEditor } from './WYSIWYGEditor';
+import { postQuestion } from '../api/questions';
 
 interface Tag {
   id: string;
@@ -36,8 +35,11 @@ export const AskQuestionPage: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredTags = availableTags.filter(tag => 
+  const filteredTags = availableTags.filter(tag =>
     tag.name.toLowerCase().includes(tagSearch.toLowerCase()) &&
     !selectedTags.find(selected => selected.id === tag.id)
   );
@@ -52,12 +54,32 @@ export const AskQuestionPage: React.FC = () => {
     setSelectedTags(selectedTags.filter(tag => tag.id !== tagId));
   };
 
-  const handleSubmit = () => {
-    console.log({
-      title,
-      description,
-      tags: selectedTags.map(tag => tag.name)
-    });
+  const handleSubmit = async () => {
+    setLoading(true);
+    setSuccess(null);
+    setError(null);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('You must be logged in to post a question.');
+      setLoading(false);
+      return;
+    }
+    try {
+      await postQuestion({
+        title,
+        description,
+        tags: selectedTags.map(tag => tag.name),
+        token
+      });
+      setSuccess('Question posted successfully!');
+      setTitle('');
+      setDescription('');
+      setSelectedTags([]);
+    } catch {
+      setError('Failed to post question. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,7 +150,7 @@ export const AskQuestionPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 py-8 relative z-10">
         {/* Page Header */}
-        <motion.div 
+        <motion.div
           className="text-center mb-12"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -142,7 +164,7 @@ export const AskQuestionPage: React.FC = () => {
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Form - Left Side */}
-          <motion.div 
+          <motion.div
             className="lg:col-span-2"
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -168,7 +190,7 @@ export const AskQuestionPage: React.FC = () => {
                 <label className="block text-lg font-semibold text-gray-900 mb-3">
                   Detailed Description
                 </label>
-                
+
                 <WYSIWYGEditor
                   value={description}
                   onChange={setDescription}
@@ -180,7 +202,7 @@ export const AskQuestionPage: React.FC = () => {
           </motion.div>
 
           {/* Sidebar - Right Side */}
-          <motion.div 
+          <motion.div
             className="space-y-6"
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -189,7 +211,7 @@ export const AskQuestionPage: React.FC = () => {
             {/* Tag Selector */}
             <div className="bg-white rounded-3xl shadow-xl p-6 border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Tags</h3>
-              
+
               {/* Selected Tags */}
               {selectedTags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -285,20 +307,29 @@ export const AskQuestionPage: React.FC = () => {
         </div>
 
         {/* Submit Button */}
-        <motion.div 
+        <motion.div
           className="mt-8 text-center"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.5 }}
         >
+          {success && <div className="mb-4 text-green-600 font-semibold">{success}</div>}
+          {error && <div className="mb-4 text-red-600 font-semibold">{error}</div>}
           <motion.button
             onClick={handleSubmit}
-            className="bg-gradient-to-r from-[#1f0d38] to-purple-600 hover:from-[#2d1b4e] hover:to-purple-700 text-white px-12 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-[#1f0d38]/25 flex items-center gap-3 mx-auto"
+            className="bg-gradient-to-r from-[#1f0d38] to-purple-600 hover:from-[#2d1b4e] hover:to-purple-700 text-white px-12 py-4 rounded-2xl font-semibold text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-[#1f0d38]/25 flex items-center gap-3 mx-auto disabled:opacity-60 disabled:cursor-not-allowed"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            disabled={loading}
           >
-            <Rocket className="w-5 h-5" />
-            🚀 Post My Question
+            {loading ? (
+              <span>Posting...</span>
+            ) : (
+              <>
+                <Rocket className="w-5 h-5" />
+                🚀 Post My Question
+              </>
+            )}
           </motion.button>
         </motion.div>
       </div>

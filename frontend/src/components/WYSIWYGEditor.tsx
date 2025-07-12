@@ -1,14 +1,14 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Bold, 
-  Italic, 
-  Strikethrough, 
-  List, 
-  Link, 
-  Image, 
-  AlignLeft, 
-  AlignCenter, 
+import {
+  Bold,
+  Italic,
+  Strikethrough,
+  List,
+  Link,
+  Image,
+  AlignLeft,
+  AlignCenter,
   AlignRight,
   Smile,
   Code,
@@ -23,9 +23,9 @@ interface WYSIWYGEditorProps {
   minHeight?: string;
 }
 
-export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({ 
-  value, 
-  onChange, 
+export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
+  value,
+  onChange,
   placeholder = "Write your content here...",
   minHeight = "200px"
 }) => {
@@ -134,7 +134,7 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
     if (linkUrl) {
       const selection = window.getSelection();
       const text = linkText || selection?.toString() || linkUrl;
-      
+
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const link = document.createElement('a');
@@ -142,12 +142,12 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
         link.textContent = text;
         link.style.color = '#1f0d38';
         link.style.textDecoration = 'underline';
-        
+
         range.deleteContents();
         range.insertNode(link);
         selection.removeAllRanges();
       }
-      
+
       setIsLinkModalOpen(false);
       setLinkUrl('');
       setLinkText('');
@@ -227,11 +227,10 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               <motion.button
                 key={index}
                 onClick={button.action}
-                className={`p-2 rounded-lg transition-colors group relative ${
-                  isCommandActive(button.command)
-                    ? 'bg-[#1f0d38] text-white' 
+                className={`p-2 rounded-lg transition-colors group relative ${isCommandActive(button.command)
+                    ? 'bg-[#1f0d38] text-white'
                     : 'hover:bg-gray-200 text-gray-700'
-                }`}
+                  }`}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 title={button.tooltip}
@@ -250,11 +249,10 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               <motion.button
                 key={index}
                 onClick={button.action}
-                className={`p-2 rounded-lg transition-colors ${
-                  isCommandActive(button.command)
-                    ? 'bg-[#1f0d38] text-white' 
+                className={`p-2 rounded-lg transition-colors ${isCommandActive(button.command)
+                    ? 'bg-[#1f0d38] text-white'
                     : 'hover:bg-gray-200 text-gray-700'
-                }`}
+                  }`}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 title={button.tooltip}
@@ -299,11 +297,10 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
               <motion.button
                 key={index}
                 onClick={button.action}
-                className={`p-2 rounded-lg transition-colors ${
-                  button.active 
-                    ? 'bg-[#1f0d38] text-white' 
+                className={`p-2 rounded-lg transition-colors ${button.active
+                    ? 'bg-[#1f0d38] text-white'
                     : 'hover:bg-gray-200 text-gray-700'
-                }`}
+                  }`}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 title={button.tooltip}
@@ -520,8 +517,8 @@ export const WYSIWYGEditor: React.FC<WYSIWYGEditorProps> = ({
 
       {/* Click outside to close emoji picker */}
       {showEmojiPicker && (
-        <div 
-          className="fixed inset-0 z-5" 
+        <div
+          className="fixed inset-0 z-5"
           onClick={() => setShowEmojiPicker(false)}
         />
       )}

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
+// @ts-expect-error: DOMPurify may not have types, but is needed for sanitizing HTML
+import DOMPurify from 'dompurify';
 import { motion } from 'framer-motion';
 import {
-  Home,
-  ChevronRight,
   ArrowUp,
   ArrowDown,
   MessageCircle,
@@ -14,7 +14,6 @@ import {
   Send,
   Award,
   Eye,
-  Calendar,
   ArrowLeft,
 } from 'lucide-react';
 import { WYSIWYGEditor } from './WYSIWYGEditor';
@@ -73,26 +72,44 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
   useEffect(() => {
     setLoading(true);
     fetchQuestionById(questionId)
-      .then((data) => {
+      .then((data: {
+        id?: string;
+        title?: string;
+        description?: string;
+        tags?: { name: string }[];
+        author?: { username?: string };
+        createdAt?: string;
+        votes?: number;
+        views?: number;
+        answers?: {
+          id?: string;
+          content?: string;
+          author?: { username?: string };
+          createdAt?: string;
+          votes?: { value?: number }[];
+          isAccepted?: boolean;
+        }[];
+        acceptedAnswerId?: string;
+      }) => {
         // Map backend data to frontend format
         setQuestion({
-          id: data.id,
-          title: data.title,
-          description: typeof data.description === 'string' ? data.description : JSON.stringify(data.description),
-          tags: data.tags.map((tag: any) => tag.name),
-          author: { username: data.author.username, avatar: null },
-          createdAt: data.createdAt,
-          votes: data.votes || 0,
-          views: data.views || 0,
-          answers: (data.answers || []).map((ans: any) => ({
-            id: ans.id,
-            content: typeof ans.content === 'string' ? ans.content : JSON.stringify(ans.content),
-            author: { username: ans.author.username, avatar: null },
-            createdAt: ans.createdAt,
-            votes: (ans.votes || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0),
+          id: typeof data.id === 'string' ? data.id : '',
+          title: typeof data.title === 'string' ? data.title : '',
+          description: typeof data.description === 'string' ? (data.description ?? '') : JSON.stringify(data.description ?? ''),
+          tags: Array.isArray(data.tags) ? (data.tags as { name: string }[]).map((tag) => tag.name) : [],
+          author: { username: data.author?.username ?? '', avatar: '' },
+          createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+          votes: typeof data.votes === 'number' ? data.votes : 0,
+          views: typeof data.views === 'number' ? data.views : 0,
+          answers: Array.isArray(data.answers) ? data.answers.map((ans: { id?: string; content?: string; author?: { username?: string }; createdAt?: string; votes?: { value?: number }[]; isAccepted?: boolean }) => ({
+            id: typeof ans.id === 'string' ? ans.id : '',
+            content: typeof ans.content === 'string' ? (ans.content ?? '') : JSON.stringify(ans.content ?? ''),
+            author: { username: ans.author?.username ?? '', avatar: '' },
+            createdAt: typeof ans.createdAt === 'string' ? ans.createdAt : '',
+            votes: Array.isArray(ans.votes) ? ans.votes.reduce((sum, v) => sum + (v.value || 0), 0) : 0,
             isAccepted: !!(ans.isAccepted || (data.acceptedAnswerId && ans.id === data.acceptedAnswerId)),
-            comments: [], // Add comment mapping if available
-          })),
+            comments: [] as never[], // Add comment mapping if available
+          })) : [],
           isOwner: false, // Set this based on auth if needed
         });
         setError(null);
@@ -187,11 +204,14 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
                 )}
               </div>
 
-              {/* Question Content */}
+              {/* Question Content (WYSIWYG) */}
               <div className="prose max-w-none mb-6">
-                <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                  {question.description}
-                </p>
+                <div
+                  className="text-gray-700 leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(question.description)
+                  }}
+                />
               </div>
 
               {/* Tags */}

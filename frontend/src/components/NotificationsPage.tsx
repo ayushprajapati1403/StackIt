@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Bell, 
-  MessageCircle, 
-  AtSign, 
-  CheckCircle, 
-  Clock, 
+import {
+  Bell,
+  MessageCircle,
+  AtSign,
+  CheckCircle,
+  Clock,
   ArrowRight,
   Check,
-  X,
-  Filter,
   Search,
-  MoreVertical,
   Trash2,
-  Eye,
-  EyeOff
+  Eye
 } from 'lucide-react';
+import { fetchNotifications, markNotificationsRead } from '../api/notifications';
 
 interface Notification {
   id: string;
@@ -32,77 +29,29 @@ interface Notification {
   avatar?: string;
 }
 
-// Mock data - replace with actual API calls
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'answered',
-    message: '@sarahcode answered your question: "How to implement JWT authentication?"',
-    createdAt: '2024-01-15T10:30:00Z',
-    isRead: false,
-    metadata: { questionId: 'q1', userId: 'u2', username: 'sarahcode' },
-    avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  },
-  {
-    id: '2',
-    type: 'commented',
-    message: '@mikejs commented on your answer about React hooks',
-    createdAt: '2024-01-15T09:15:00Z',
-    isRead: false,
-    metadata: { answerId: 'a1', userId: 'u3', username: 'mikejs' },
-    avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  },
-  {
-    id: '3',
-    type: 'mentioned',
-    message: '@emmaweb mentioned you in an answer about CSS Grid layouts',
-    createdAt: '2024-01-15T08:45:00Z',
-    isRead: true,
-    metadata: { answerId: 'a2', userId: 'u4', username: 'emmaweb' },
-    avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  },
-  {
-    id: '4',
-    type: 'accepted',
-    message: '@alexdev accepted your answer about Node.js performance optimization',
-    createdAt: '2024-01-14T22:20:00Z',
-    isRead: true,
-    metadata: { answerId: 'a3', userId: 'u1', username: 'alexdev' },
-    avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  },
-  {
-    id: '5',
-    type: 'voted',
-    message: '5 people upvoted your answer about TypeScript generics',
-    createdAt: '2024-01-14T18:30:00Z',
-    isRead: true,
-    metadata: { answerId: 'a4' }
-  },
-  {
-    id: '6',
-    type: 'commented',
-    message: '@rachelreact commented on your question about async operations',
-    createdAt: '2024-01-14T15:10:00Z',
-    isRead: true,
-    metadata: { questionId: 'q2', userId: 'u5', username: 'rachelreact' },
-    avatar: 'https://images.pexels.com/photos/1181686/pexels-photo-1181686.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  },
-  {
-    id: '7',
-    type: 'answered',
-    message: '@davidstyles answered your question: "CSS Grid vs Flexbox comparison"',
-    createdAt: '2024-01-14T12:45:00Z',
-    isRead: true,
-    metadata: { questionId: 'q3', userId: 'u6', username: 'davidstyles' },
-    avatar: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1'
-  }
-];
-
 export const NotificationsPage: React.FC = () => {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread' | 'answered' | 'commented' | 'mentioned'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Not authenticated');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetchNotifications(token)
+      .then(data => {
+        setNotifications(data);
+        setError(null);
+      })
+      .catch((err) => setError(err.message || 'Failed to load notifications'))
+      .finally(() => setLoading(false));
+  }, []);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -110,7 +59,7 @@ export const NotificationsPage: React.FC = () => {
     const now = new Date();
     const notificationDate = new Date(date);
     const diffInMinutes = Math.floor((now.getTime() - notificationDate.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
     const diffInHours = Math.floor(diffInMinutes / 60);
@@ -154,12 +103,16 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const markAllAsRead = async () => {
-    // API call: POST /api/notifications/mark-read
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const unreadIds = notifications.filter(n => !n.isRead).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    await markNotificationsRead(token, unreadIds);
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
   const markAsRead = (id: string) => {
-    setNotifications(prev => 
+    setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, isRead: true } : n)
     );
   };
@@ -168,9 +121,20 @@ export const NotificationsPage: React.FC = () => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const handleNotificationClick = (notification: Notification) => {
-    markAsRead(notification.id);
-    
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.isRead) {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          await markNotificationsRead(token, [notification.id]);
+          setNotifications(prev =>
+            prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
+          );
+        } catch {
+          // Optionally handle error
+        }
+      }
+    }
     // Redirect based on metadata
     if (notification.metadata.questionId) {
       // Navigate to question
@@ -182,22 +146,27 @@ export const NotificationsPage: React.FC = () => {
   };
 
   const filteredNotifications = notifications.filter(notification => {
-    const matchesFilter = filter === 'all' || 
-                         (filter === 'unread' && !notification.isRead) ||
-                         notification.type === filter;
-    
+    let matchesFilter = true;
+    if (filter === 'unread') {
+      matchesFilter = !notification.isRead;
+    }
+    // 'all' shows all notifications, both read and unread
     const matchesSearch = notification.message.toLowerCase().includes(searchTerm.toLowerCase());
-    
     return matchesFilter && matchesSearch;
   });
 
   const filterOptions = [
     { value: 'all', label: 'All', count: notifications.length },
     { value: 'unread', label: 'Unread', count: unreadCount },
-    { value: 'answered', label: 'Answered', count: notifications.filter(n => n.type === 'answered').length },
-    { value: 'commented', label: 'Comments', count: notifications.filter(n => n.type === 'commented').length },
-    { value: 'mentioned', label: 'Mentions', count: notifications.filter(n => n.type === 'mentioned').length },
+    // Removed 'answered', 'commented', and 'mentioned' filter options
   ];
+
+  if (loading) {
+    return <div className="text-center py-12 text-lg text-gray-500">Loading notifications...</div>;
+  }
+  if (error) {
+    return <div className="text-center py-12 text-lg text-red-500">{error}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -228,7 +197,7 @@ export const NotificationsPage: React.FC = () => {
                   </motion.div>
                 )}
               </motion.div>
-              
+
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">Notifications</h1>
                 <p className="text-gray-600">
@@ -280,21 +249,19 @@ export const NotificationsPage: React.FC = () => {
               {filterOptions.map((option) => (
                 <motion.button
                   key={option.value}
-                  onClick={() => setFilter(option.value as any)}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-xl font-medium whitespace-nowrap transition-all duration-300 ${
-                    filter === option.value
-                      ? 'bg-[#1f0d38] text-white shadow-lg'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+                  onClick={() => setFilter(option.value as 'all' | 'unread')}
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl font-medium whitespace-nowrap transition-all duration-300 ${filter === option.value
+                    ? 'bg-[#1f0d38] text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
                   {option.label}
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    filter === option.value
-                      ? 'bg-white/20 text-white'
-                      : 'bg-gray-200 text-gray-600'
-                  }`}>
+                  <span className={`text-xs px-2 py-1 rounded-full ${filter === option.value
+                    ? 'bg-white/20 text-white'
+                    : 'bg-gray-200 text-gray-600'
+                    }`}>
                     {option.count}
                   </span>
                 </motion.button>
@@ -320,9 +287,8 @@ export const NotificationsPage: React.FC = () => {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3, delay: index * 0.05 }}
-                    className={`relative p-6 hover:bg-gray-50 transition-all duration-300 cursor-pointer group ${
-                      !notification.isRead ? 'bg-blue-50/30' : ''
-                    }`}
+                    className={`relative p-6 hover:bg-gray-50 transition-all duration-300 cursor-pointer group ${!notification.isRead ? 'bg-blue-50/30' : ''
+                      }`}
                     onClick={() => handleNotificationClick(notification)}
                   >
                     {/* Unread Indicator */}
@@ -347,9 +313,8 @@ export const NotificationsPage: React.FC = () => {
 
                       {/* Content */}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-gray-900 leading-relaxed ${
-                          !notification.isRead ? 'font-semibold' : 'font-medium'
-                        }`}>
+                        <p className={`text-gray-900 leading-relaxed ${!notification.isRead ? 'font-semibold' : 'font-medium'
+                          }`}>
                           {notification.message}
                         </p>
                         <div className="flex items-center gap-2 mt-2">
@@ -376,7 +341,7 @@ export const NotificationsPage: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </motion.button>
                         )}
-                        
+
                         <motion.button
                           onClick={(e) => {
                             e.stopPropagation();

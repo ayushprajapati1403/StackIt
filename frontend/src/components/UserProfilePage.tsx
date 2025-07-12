@@ -19,6 +19,8 @@ import {
   ChevronRight,
   Plus
 } from 'lucide-react';
+import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserComments } from '../api/users';
+import { useContext } from 'react';
 
 interface UserProfile {
   id: string;
@@ -65,90 +67,43 @@ interface UserComment {
   createdAt: string;
 }
 
-// Mock data - replace with actual API calls
-const mockUserProfile: UserProfile = {
-  id: '1',
-  username: 'alexdev',
-  email: 'alex@example.com',
-  avatar: 'https://images.pexels.com/photos/2379004/pexels-photo-2379004.jpeg?auto=compress&cs=tinysrgb&w=150&h=150&dpr=1',
-  role: 'ADMIN',
-  joinDate: '2024-05-15T10:30:00Z',
-  stats: {
-    questionsAsked: 24,
-    answersGiven: 67,
-    unreadNotifications: 5,
-    totalVotes: 342,
-    acceptedAnswers: 23
-  }
-};
+interface UserProfilePageProps {
+  setCurrentPage: (page: string) => void;
+}
 
-const mockUserQuestions: UserQuestion[] = [
-  {
-    id: '1',
-    title: 'How to implement authentication in React with TypeScript?',
-    createdAt: '2024-01-15T10:30:00Z',
-    tags: ['react', 'typescript', 'authentication'],
-    answerCount: 5,
-    votes: 24,
-    isOwner: true
-  },
-  {
-    id: '2',
-    title: 'Best practices for state management in large React applications',
-    createdAt: '2024-01-14T08:15:00Z',
-    tags: ['react', 'state-management', 'redux'],
-    answerCount: 8,
-    votes: 42,
-    isOwner: true
-  }
-];
-
-const mockUserAnswers: UserAnswer[] = [
-  {
-    id: '1',
-    content: 'You can implement automatic token refresh using an interceptor. Here\'s a complete solution that ensures seamless user experience...',
-    questionTitle: 'JWT token refresh mechanism in Node.js',
-    questionId: 'q1',
-    createdAt: '2024-01-15T11:15:00Z',
-    votes: 18,
-    isAccepted: true
-  },
-  {
-    id: '2',
-    content: 'Another approach is to use React Query with automatic retries. This library handles token refresh automatically...',
-    questionTitle: 'React authentication best practices',
-    questionId: 'q2',
-    createdAt: '2024-01-14T12:30:00Z',
-    votes: 12,
-    isAccepted: false
-  }
-];
-
-const mockUserComments: UserComment[] = [
-  {
-    id: '1',
-    content: 'Great solution! I would also recommend adding error handling for network failures.',
-    relatedTitle: 'How to handle API errors in React?',
-    relatedId: 'q3',
-    relatedType: 'question',
-    createdAt: '2024-01-13T14:20:00Z'
-  },
-  {
-    id: '2',
-    content: 'This approach worked perfectly for my use case. Thanks for the detailed explanation!',
-    relatedTitle: 'TypeScript generic constraints explained',
-    relatedId: 'a5',
-    relatedType: 'answer',
-    createdAt: '2024-01-12T16:45:00Z'
-  }
-];
-
-export const UserProfilePage: React.FC = () => {
+export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage }) => {
   const [activeTab, setActiveTab] = useState<'questions' | 'answers' | 'comments'>('questions');
-  const [userProfile] = useState<UserProfile>(mockUserProfile);
-  const [userQuestions] = useState<UserQuestion[]>(mockUserQuestions);
-  const [userAnswers] = useState<UserAnswer[]>(mockUserAnswers);
-  const [userComments] = useState<UserComment[]>(mockUserComments);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userQuestions, setUserQuestions] = useState<any[]>([]);
+  const [userAnswers, setUserAnswers] = useState<any[]>([]);
+  const [userComments, setUserComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setError('Not authenticated');
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    Promise.all([
+      fetchUserProfile(token),
+      fetchUserQuestions(token),
+      fetchUserAnswers(token),
+      fetchUserComments(token)
+    ])
+      .then(([profile, questions, answers, comments]) => {
+        setUserProfile(profile);
+        setUserQuestions(questions);
+        setUserAnswers(answers);
+        setUserComments(comments);
+        setError(null);
+      })
+      .catch((err) => setError(err.message || 'Failed to load user data'))
+      .finally(() => setLoading(false));
+  }, []);
 
   const timeAgo = (date: string) => {
     const now = new Date();
@@ -185,6 +140,13 @@ export const UserProfilePage: React.FC = () => {
     { id: 'comments', label: 'My Comments', count: userComments.length },
   ];
 
+  if (loading) {
+    return <div className="text-center py-12 text-lg text-gray-500">Loading profile...</div>;
+  }
+  if (error || !userProfile) {
+    return <div className="text-center py-12 text-lg text-red-500">{error || 'User not found.'}</div>;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -203,7 +165,7 @@ export const UserProfilePage: React.FC = () => {
                 className="relative"
               >
                 <img
-                  src={userProfile.avatar}
+                  src={userProfile.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userProfile.username)}
                   alt={userProfile.username}
                   className="w-24 h-24 rounded-full object-cover border-4 border-[#1f0d38]"
                 />
@@ -218,15 +180,15 @@ export const UserProfilePage: React.FC = () => {
                 <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-3xl font-bold text-gray-900">{userProfile.username}</h1>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${userProfile.role === 'ADMIN'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-blue-100 text-blue-800'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-blue-100 text-blue-800'
                     }`}>
                     {userProfile.role}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-gray-600 mb-4">
                   <Calendar className="w-4 h-4" />
-                  <span>Member since {formatJoinDate(userProfile.joinDate)}</span>
+                  <span>Member since {formatJoinDate(userProfile.createdAt || userProfile.joinDate)}</span>
                 </div>
 
                 {/* Stats Badges */}
@@ -236,7 +198,7 @@ export const UserProfilePage: React.FC = () => {
                     className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-xl"
                   >
                     <Brain className="w-5 h-5" />
-                    <span className="font-semibold">{userProfile.stats.questionsAsked}</span>
+                    <span className="font-semibold">{userProfile.totalQuestions ?? userProfile.stats?.questionsAsked ?? 0}</span>
                     <span className="text-sm">Questions</span>
                   </motion.div>
 
@@ -245,7 +207,7 @@ export const UserProfilePage: React.FC = () => {
                     className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    <span className="font-semibold">{userProfile.stats.answersGiven}</span>
+                    <span className="font-semibold">{userProfile.totalAnswers ?? userProfile.stats?.answersGiven ?? 0}</span>
                     <span className="text-sm">Answers</span>
                   </motion.div>
 
@@ -255,7 +217,7 @@ export const UserProfilePage: React.FC = () => {
                     onClick={() => {/* Navigate to notifications */ }}
                   >
                     <Bell className="w-5 h-5" />
-                    <span className="font-semibold">{userProfile.stats.unreadNotifications}</span>
+                    <span className="font-semibold">{userProfile.stats?.unreadNotifications ?? 0}</span>
                     <span className="text-sm">Notifications</span>
                   </motion.div>
 
@@ -264,7 +226,7 @@ export const UserProfilePage: React.FC = () => {
                     className="flex items-center gap-2 bg-yellow-50 text-yellow-700 px-4 py-2 rounded-xl"
                   >
                     <Award className="w-5 h-5" />
-                    <span className="font-semibold">{userProfile.stats.acceptedAnswers}</span>
+                    <span className="font-semibold">{userProfile.stats?.acceptedAnswers ?? 0}</span>
                     <span className="text-sm">Accepted</span>
                   </motion.div>
                 </div>
@@ -314,8 +276,8 @@ export const UserProfilePage: React.FC = () => {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`flex-1 px-6 py-4 text-center font-semibold transition-all duration-300 ${activeTab === tab.id
-                        ? 'bg-[#1f0d38] text-white'
-                        : 'text-gray-600 hover:bg-gray-50'
+                      ? 'bg-[#1f0d38] text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
                       }`}
                   >
                     {tab.label} ({tab.count})
@@ -354,14 +316,13 @@ export const UserProfilePage: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {question.tags.map((tag, tagIndex) => (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {(question.tags || []).map((tag: any, tagIndex: number) => (
                             <span
-                              key={tag}
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${tagColors[tagIndex % tagColors.length]
-                                }`}
+                              key={tag.id || tag.name || tagIndex}
+                              className={`px-3 py-1 rounded-full text-xs font-medium ${tagColors[tagIndex % tagColors.length]}`}
                             >
-                              {tag}
+                              {typeof tag === 'string' ? tag : tag.name}
                             </span>
                           ))}
                         </div>
@@ -418,7 +379,7 @@ export const UserProfilePage: React.FC = () => {
                             {answer.questionTitle}
                           </h4>
                           <p className="text-gray-700 line-clamp-3">
-                            {answer.content}
+                            {typeof answer.content === 'string' ? answer.content : JSON.stringify(answer.content)}
                           </p>
                         </div>
 
@@ -507,19 +468,19 @@ export const UserProfilePage: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Total Votes</span>
-                  <span className="font-bold text-[#1f0d38]">{userProfile.stats.totalVotes}</span>
+                  <span className="font-bold text-[#1f0d38]">{userProfile.stats?.totalVotes ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Accepted Answers</span>
-                  <span className="font-bold text-green-600">{userProfile.stats.acceptedAnswers}</span>
+                  <span className="font-bold text-green-600">{userProfile.stats?.acceptedAnswers ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Questions Asked</span>
-                  <span className="font-bold text-blue-600">{userProfile.stats.questionsAsked}</span>
+                  <span className="font-bold text-blue-600">{userProfile.stats?.questionsAsked ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">Answers Given</span>
-                  <span className="font-bold text-purple-600">{userProfile.stats.answersGiven}</span>
+                  <span className="font-bold text-purple-600">{userProfile.stats?.answersGiven ?? 0}</span>
                 </div>
               </div>
             </div>
@@ -528,17 +489,20 @@ export const UserProfilePage: React.FC = () => {
             <div className="bg-white rounded-3xl shadow-xl p-6 border border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
               <div className="space-y-3">
-                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors">
+                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors"
+                  onClick={() => setCurrentPage('ask')}>
                   <Plus className="w-5 h-5 text-[#1f0d38]" />
                   <span>Ask New Question</span>
                   <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
                 </button>
-                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors">
+                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors"
+                  onClick={() => setCurrentPage('notifications')}>
                   <Bell className="w-5 h-5 text-[#1f0d38]" />
                   <span>View Notifications</span>
                   <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
                 </button>
-                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors">
+                <button className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-xl transition-colors"
+                  onClick={() => setCurrentPage('home')}>
                   <Eye className="w-5 h-5 text-[#1f0d38]" />
                   <span>Browse Questions</span>
                   <ChevronRight className="w-4 h-4 ml-auto text-gray-400" />
