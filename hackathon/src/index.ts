@@ -1,6 +1,7 @@
 import { configDotenv } from 'dotenv';
 import express from 'express';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import authRoutes from './routes/auth';
 import questionsRoutes from './routes/questions';
 import answersRoutes from './routes/answers';
@@ -17,8 +18,9 @@ const app = express();
 dotenv.config();
 const PORT = process.env.PORT;
 
+app.use(cors());
 app.use(express.json());
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/questions', questionsRoutes);
 app.use('/api/answers', answersRoutes);
 app.use('/api/votes', votesRoutes);

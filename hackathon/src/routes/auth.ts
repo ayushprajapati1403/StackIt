@@ -65,4 +65,10 @@ router.post('/login', async (req, res) => {
 	}
 });
 
+// Logout route (stateless, frontend should clear token)
+router.post('/logout', (req, res) => {
+	// Optionally, you could implement token blacklisting here
+	res.json({ message: 'Logged out successfully' });
+});
+
 export default router; 
