@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  User,
   Calendar,
   Brain,
   MessageCircle,
@@ -12,60 +11,17 @@ import {
   ExternalLink,
   ArrowUp,
   Clock,
-  Tag,
   Shield,
   Award,
   Eye,
   ChevronRight,
-  Plus
+  Plus,
+  X
 } from 'lucide-react';
 import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserComments } from '../api/users';
-import { useContext } from 'react';
-
-interface UserProfile {
-  id: string;
-  username: string;
-  email: string;
-  avatar: string;
-  role: 'USER' | 'ADMIN';
-  joinDate: string;
-  stats: {
-    questionsAsked: number;
-    answersGiven: number;
-    unreadNotifications: number;
-    totalVotes: number;
-    acceptedAnswers: number;
-  };
-}
-
-interface UserQuestion {
-  id: string;
-  title: string;
-  createdAt: string;
-  tags: string[];
-  answerCount: number;
-  votes: number;
-  isOwner: boolean;
-}
-
-interface UserAnswer {
-  id: string;
-  content: string;
-  questionTitle: string;
-  questionId: string;
-  createdAt: string;
-  votes: number;
-  isAccepted: boolean;
-}
-
-interface UserComment {
-  id: string;
-  content: string;
-  relatedTitle: string;
-  relatedId: string;
-  relatedType: 'question' | 'answer';
-  createdAt: string;
-}
+import { updateQuestion, deleteQuestion } from '../api/questions';
+import { deleteAnswer } from '../api/answers';
+import { deleteComment } from '../api/comments';
 
 interface UserProfilePageProps {
   setCurrentPage: (page: string) => void;
@@ -73,12 +29,173 @@ interface UserProfilePageProps {
 
 export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage }) => {
   const [activeTab, setActiveTab] = useState<'questions' | 'answers' | 'comments'>('questions');
-  const [userProfile, setUserProfile] = useState<any>(null);
-  const [userQuestions, setUserQuestions] = useState<any[]>([]);
-  const [userAnswers, setUserAnswers] = useState<any[]>([]);
-  const [userComments, setUserComments] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<{
+    id: string;
+    username: string;
+    email: string;
+    avatar: string;
+    role: 'USER' | 'ADMIN';
+    joinDate?: string;
+    createdAt?: string;
+    stats?: {
+      questionsAsked: number;
+      answersGiven: number;
+      unreadNotifications: number;
+      totalVotes: number;
+      acceptedAnswers: number;
+    };
+    totalQuestions?: number;
+    totalAnswers?: number;
+  } | null>(null);
+  const [userQuestions, setUserQuestions] = useState<Array<{
+    id: string;
+    title: string;
+    createdAt: string;
+    tags: Array<string | { id?: string; name: string }>;
+    answerCount: number;
+    votes: number;
+    isOwner?: boolean;
+    description?: any;
+  }>>([]);
+  const [userAnswers, setUserAnswers] = useState<Array<{
+    id: string;
+    content: string;
+    questionTitle: string;
+    questionId: string;
+    createdAt: string;
+    votes: number;
+    isAccepted: boolean;
+  }>>([]);
+  const [userComments, setUserComments] = useState<Array<{
+    id: string;
+    content: string;
+    relatedTitle: string;
+    relatedId: string;
+    relatedType: 'question' | 'answer';
+    createdAt: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editQuestion, setEditQuestion] = useState<null | (typeof userQuestions[number])>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const openEditModal = (question: typeof userQuestions[number]) => {
+    setEditQuestion(question);
+    setEditTitle(question.title);
+    setEditDescription(
+      typeof question.description === 'string'
+        ? question.description
+        : question.description
+          ? JSON.stringify(question.description, null, 2)
+          : ''
+    );
+    setEditTags(Array.isArray(question.tags) ? question.tags.map((t) => (typeof t === 'string' ? t : t.name)) : []);
+    setEditModalOpen(true);
+    setEditError(null);
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpen(false);
+    setEditQuestion(null);
+    setEditTitle('');
+    setEditDescription('');
+    setEditTags([]);
+    setEditError(null);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editQuestion) return;
+    setEditLoading(true);
+    setEditError(null);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setEditError('Not authenticated');
+      setEditLoading(false);
+      return;
+    }
+    try {
+      let descriptionToSend: any = editDescription;
+      try {
+        // Try to parse as JSON for rich content
+        descriptionToSend = JSON.parse(editDescription);
+      } catch {
+        // If not valid JSON, send as string
+        descriptionToSend = editDescription;
+      }
+      const updated = await updateQuestion({
+        id: editQuestion.id,
+        title: editTitle,
+        description: descriptionToSend,
+        tags: editTags,
+        token
+      });
+      setUserQuestions(prev => prev.map(q => q.id === updated.id ? { ...q, ...updated } : q));
+      closeEditModal();
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        setEditError((err as { message?: string }).message || 'Failed to update question');
+      } else {
+        setEditError('Failed to update question');
+      }
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this question?')) return;
+    try {
+      await deleteQuestion({ id, token });
+      setUserQuestions(prev => prev.filter(q => q.id !== id));
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        alert((err as { message?: string }).message || 'Failed to delete question');
+      } else {
+        alert('Failed to delete question');
+      }
+    }
+  };
+
+  const handleDeleteAnswer = async (id: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this answer?')) return;
+    try {
+      await deleteAnswer({ id, token });
+      setUserAnswers(prev => prev.filter(a => a.id !== id));
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        alert((err as { message?: string }).message || 'Failed to delete answer');
+      } else {
+        alert('Failed to delete answer');
+      }
+    }
+  };
+
+  const handleDeleteComment = async (id: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+    try {
+      await deleteComment({ id, token });
+      setUserComments(prev => prev.filter(c => c.id !== id));
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        alert((err as { message?: string }).message || 'Failed to delete comment');
+      } else {
+        alert('Failed to delete comment');
+      }
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -101,7 +218,13 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
         setUserComments(comments);
         setError(null);
       })
-      .catch((err) => setError(err.message || 'Failed to load user data'))
+      .catch((err: unknown) => {
+        if (typeof err === 'object' && err !== null && 'message' in err) {
+          setError((err as { message?: string }).message || 'Failed to load user data');
+        } else {
+          setError('Failed to load user data');
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -118,7 +241,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
     return `${diffInMonths}mo ago`;
   };
 
-  const formatJoinDate = (date: string) => {
+  const formatJoinDate = (date: string | undefined) => {
+    if (!date) return '';
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long'
@@ -274,7 +398,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
                     className={`flex-1 px-6 py-4 text-center font-semibold transition-all duration-300 ${activeTab === tab.id
                       ? 'bg-[#1f0d38] text-white'
                       : 'text-gray-600 hover:bg-gray-50'
@@ -307,24 +431,41 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                             {question.title}
                           </h3>
                           <div className="flex gap-2">
-                            <button className="p-2 text-gray-600 hover:text-[#1f0d38] hover:bg-gray-100 rounded-lg transition-colors">
+                            <button
+                              className="p-2 text-gray-600 hover:text-[#1f0d38] hover:bg-gray-100 rounded-lg transition-colors"
+                              onClick={() => openEditModal(question)}
+                            >
                               <Edit className="w-4 h-4" />
                             </button>
-                            <button className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                            <button
+                              className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              onClick={() => handleDeleteQuestion(question.id)}
+                            >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
 
                         <div className="flex flex-wrap gap-2 mb-2">
-                          {(question.tags || []).map((tag: any, tagIndex: number) => (
-                            <span
-                              key={tag.id || tag.name || tagIndex}
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${tagColors[tagIndex % tagColors.length]}`}
-                            >
-                              {typeof tag === 'string' ? tag : tag.name}
-                            </span>
-                          ))}
+                          {(question.tags || []).map((tag: string | { id?: string; name: string }, tagIndex: number) => {
+                            let key: string | number = tagIndex;
+                            let label: string = '';
+                            if (typeof tag === 'string') {
+                              label = tag;
+                              key = tag + '-' + tagIndex;
+                            } else if (tag && typeof tag === 'object') {
+                              label = tag.name;
+                              key = (tag.id ?? tag.name) + '-' + tagIndex;
+                            }
+                            return (
+                              <span
+                                key={key}
+                                className={`px-3 py-1 rounded-full text-xs font-medium ${tagColors[tagIndex % tagColors.length]}`}
+                              >
+                                {label}
+                              </span>
+                            );
+                          })}
                         </div>
 
                         <div className="flex items-center justify-between text-sm text-gray-600">
@@ -364,8 +505,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
-                        className={`border rounded-2xl p-6 hover:shadow-lg transition-all duration-300 ${answer.isAccepted ? 'border-green-300 bg-green-50/50' : 'border-gray-200'
-                          }`}
+                        className={`border rounded-2xl p-6 hover:shadow-lg transition-all duration-300 ${answer.isAccepted ? 'border-green-300 bg-green-50/50' : 'border-gray-200'}`}
                       >
                         {answer.isAccepted && (
                           <div className="flex items-center gap-2 mb-4">
@@ -394,9 +534,17 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                               {answer.votes} votes
                             </span>
                           </div>
-                          <button className="flex items-center gap-1 text-[#1f0d38] hover:underline">
-                            View Question <ExternalLink className="w-3 h-3" />
-                          </button>
+                          <div className="flex gap-2">
+                            <button className="flex items-center gap-1 text-[#1f0d38] hover:underline">
+                              View Question <ExternalLink className="w-3 h-3" />
+                            </button>
+                            <button
+                              className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                              onClick={() => handleDeleteAnswer(answer.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     ))}
@@ -422,7 +570,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                           <p className="text-gray-700 flex-1 mr-4">
                             {comment.content}
                           </p>
-                          <button className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
+                          <button className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                            onClick={() => handleDeleteComment(comment.id)}>
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -526,6 +675,60 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
           </motion.div>
         </div>
       </div>
+
+      {/* Edit Question Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-lg relative">
+            <button
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-700"
+              onClick={closeEditModal}
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h2 className="text-2xl font-bold mb-6">Edit Question</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Title</label>
+              <input
+                type="text"
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1f0d38]"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Description</label>
+              <textarea
+                value={editDescription}
+                onChange={e => setEditDescription(e.target.value)}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1f0d38] min-h-[100px]"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold mb-2">Tags (comma separated)</label>
+              <input
+                type="text"
+                value={editTags.join(', ')}
+                onChange={e => setEditTags(e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
+                className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1f0d38]"
+              />
+            </div>
+            {editError && <div className="text-red-600 mb-2">{editError}</div>}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                className="px-6 py-2 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300"
+                onClick={closeEditModal}
+                disabled={editLoading}
+              >Cancel</button>
+              <button
+                className="px-6 py-2 rounded-xl bg-[#1f0d38] text-white font-semibold hover:bg-[#2d1b4e] disabled:opacity-60"
+                onClick={handleEditSubmit}
+                disabled={editLoading}
+              >{editLoading ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

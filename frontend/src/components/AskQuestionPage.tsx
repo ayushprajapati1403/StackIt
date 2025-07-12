@@ -29,7 +29,11 @@ const availableTags: Tag[] = [
   { id: '8', name: 'hooks', color: 'bg-teal-100 text-teal-800' },
 ];
 
-export const AskQuestionPage: React.FC = () => {
+interface AskQuestionPageProps {
+  setCurrentPage: (page: 'home' | 'ask' | 'question' | 'profile' | 'notifications' | 'admin' | 'login' | 'signup') => void;
+}
+
+export const AskQuestionPage: React.FC<AskQuestionPageProps> = ({ setCurrentPage }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
@@ -75,6 +79,9 @@ export const AskQuestionPage: React.FC = () => {
       setTitle('');
       setDescription('');
       setSelectedTags([]);
+      setTimeout(() => {
+        setCurrentPage('home');
+      }, 1500);
     } catch {
       setError('Failed to post question. Please try again.');
     } finally {
@@ -147,6 +154,13 @@ export const AskQuestionPage: React.FC = () => {
           <Lightbulb className="w-7 h-7 text-white" />
         </div>
       </motion.div>
+
+      {/* Toast notification */}
+      {success && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg z-50 text-lg font-semibold animate-fade-in">
+          {success}
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 py-8 relative z-10">
         {/* Page Header */}

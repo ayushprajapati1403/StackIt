@@ -19,6 +19,7 @@ import { WYSIWYGEditor } from './WYSIWYGEditor';
 import { fetchQuestionById } from '../api/questions';
 import { postAnswer } from '../api/answers';
 import { postVote } from '../api/votes';
+import { postComment, fetchComments } from '../api/comments';
 
 interface Answer {
   id: string;
@@ -69,10 +70,57 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
   const [error, setError] = useState<string | null>(null);
   const [newAnswer, setNewAnswer] = useState('');
   const [showComments, setShowComments] = useState<string | null>(null);
+  const [comments, setComments] = useState<Record<string, Array<{ id: string; content: string; author: { username: string }; createdAt: string }>>>({});
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({});
+  const [commentError, setCommentError] = useState<Record<string, string | null>>({});
   const [answerLoading, setAnswerLoading] = useState(false);
   const [answerError, setAnswerError] = useState<string | null>(null);
   const [voteLoading, setVoteLoading] = useState<string | null>(null); // answerId being voted
   const [voteError, setVoteError] = useState<string | null>(null);
+
+  // Fetch comments for an answer
+  const loadComments = async (answerId: string) => {
+    try {
+      const data = await fetchComments({ answerId });
+      setComments(prev => ({ ...prev, [answerId]: data }));
+    } catch {
+      setComments(prev => ({ ...prev, [answerId]: [] }));
+    }
+  };
+
+  // Show/hide comments and fetch if needed
+  const handleShowComments = (answerId: string) => {
+    if (showComments === answerId) {
+      setShowComments(null);
+    } else {
+      setShowComments(answerId);
+      if (!comments[answerId]) {
+        loadComments(answerId);
+      }
+    }
+  };
+
+  // Post a comment
+  const handlePostComment = async (answerId: string) => {
+    setCommentLoading(prev => ({ ...prev, [answerId]: true }));
+    setCommentError(prev => ({ ...prev, [answerId]: null }));
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setCommentError(prev => ({ ...prev, [answerId]: 'You must be logged in to comment.' }));
+      setCommentLoading(prev => ({ ...prev, [answerId]: false }));
+      return;
+    }
+    try {
+      await postComment({ answerId, content: commentInputs[answerId] || '', token });
+      setCommentInputs(prev => ({ ...prev, [answerId]: '' }));
+      await loadComments(answerId);
+    } catch {
+      setCommentError(prev => ({ ...prev, [answerId]: 'Failed to post comment.' }));
+    } finally {
+      setCommentLoading(prev => ({ ...prev, [answerId]: false }));
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -111,9 +159,9 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
             content: typeof ans.content === 'string' ? (ans.content ?? '') : JSON.stringify(ans.content ?? ''),
             author: { username: ans.author?.username ?? '', avatar: '' },
             createdAt: typeof ans.createdAt === 'string' ? ans.createdAt : '',
-            votes: Array.isArray(ans.votes) ? ans.votes.reduce((sum, v) => sum + (v.value || 0), 0) : 0,
-            isAccepted: !!(ans.isAccepted || (data.acceptedAnswerId && ans.id === data.acceptedAnswerId)),
-            comments: [] as never[], // Add comment mapping if available
+            votes: Array.isArray(ans.votes) ? ans.votes.reduce((sum: number, v: { value?: number }) => sum + (v.value || 0), 0) : 0,
+            isAccepted: false,
+            comments: [] as never[],
           })) : [],
           isOwner: false, // Set this based on auth if needed
         });
@@ -141,40 +189,6 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
     'bg-red-100 text-red-800',
   ];
 
-  // Helper to refresh question (fetch latest answers/votes)
-  const refreshQuestion = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchQuestionById(questionId);
-      // (same mapping as in useEffect)
-      setQuestion({
-        id: typeof data.id === 'string' ? data.id : '',
-        title: typeof data.title === 'string' ? data.title : '',
-        description: typeof data.description === 'string' ? (data.description ?? '') : JSON.stringify(data.description ?? ''),
-        tags: Array.isArray(data.tags) ? (data.tags as { name: string }[]).map((tag) => tag.name) : [],
-        author: { username: data.author?.username ?? '', avatar: '' },
-        createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
-        votes: typeof data.votes === 'number' ? data.votes : 0,
-        views: typeof data.views === 'number' ? data.views : 0,
-        answers: Array.isArray(data.answers) ? data.answers.map((ans: { id?: string; content?: string; author?: { username?: string }; createdAt?: string; votes?: { value?: number }[]; isAccepted?: boolean }) => ({
-          id: typeof ans.id === 'string' ? ans.id : '',
-          content: typeof ans.content === 'string' ? (ans.content ?? '') : JSON.stringify(ans.content ?? ''),
-          author: { username: ans.author?.username ?? '', avatar: '' },
-          createdAt: typeof ans.createdAt === 'string' ? ans.createdAt : '',
-          votes: Array.isArray(ans.votes) ? ans.votes.reduce((sum, v) => sum + (v.value || 0), 0) : 0,
-          isAccepted: !!(ans.isAccepted || (data.acceptedAnswerId && ans.id === data.acceptedAnswerId)),
-          comments: [] as never[],
-        })) : [],
-        isOwner: false,
-      });
-      setError(null);
-    } catch (err) {
-      setError((err as Error).message || 'Failed to load question');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Post answer handler
   const handlePostAnswer = async () => {
     setAnswerLoading(true);
@@ -186,9 +200,19 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
       return;
     }
     try {
-      await postAnswer({ questionId, content: newAnswer, token });
+      const answer = await postAnswer({ questionId, content: newAnswer, token });
       setNewAnswer('');
-      await refreshQuestion();
+      // Map backend answer to frontend format
+      const mappedAnswer = {
+        id: answer.id,
+        content: typeof answer.content === 'string' ? answer.content : JSON.stringify(answer.content ?? ''),
+        author: { username: answer.author?.username ?? '', avatar: '' },
+        createdAt: typeof answer.createdAt === 'string' ? answer.createdAt : '',
+        votes: Array.isArray(answer.votes) ? answer.votes.reduce((sum: number, v: { value?: number }) => sum + (v.value || 0), 0) : 0,
+        isAccepted: false,
+        comments: [] as never[],
+      };
+      setQuestion(prev => prev ? { ...prev, answers: [...prev.answers, mappedAnswer] } : prev);
     } catch {
       setAnswerError('Failed to post answer. Please try again.');
     } finally {
@@ -207,8 +231,19 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
       return;
     }
     try {
-      await postVote({ answerId, value, token });
-      await refreshQuestion();
+      const voteResult = await postVote({ answerId, value, token });
+      // Update only the voted answer's votes in local state
+      setQuestion(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          answers: prev.answers.map(ans =>
+            ans.id === answerId
+              ? { ...ans, votes: typeof voteResult.value === 'number' ? voteResult.value : ans.votes + value }
+              : ans
+          )
+        };
+      });
     } catch {
       setVoteError('Failed to vote. Please try again.');
     } finally {
@@ -308,17 +343,6 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
               </div>
 
               {/* Vote Section */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <ArrowUp className="w-5 h-5 text-gray-600" />
-                  </button>
-                  <span className="font-semibold text-lg">{question.votes}</span>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <ArrowDown className="w-5 h-5 text-gray-600" />
-                  </button>
-                </div>
-              </div>
             </motion.div>
 
             {/* Answers Section */}
@@ -398,7 +422,7 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
                       {voteLoading === answer.id && <span className="text-xs text-gray-400">Voting...</span>}
                       {voteError && <span className="text-xs text-red-500">{voteError}</span>}
                       <button
-                        onClick={() => setShowComments(showComments === answer.id ? null : answer.id)}
+                        onClick={() => handleShowComments(answer.id)}
                         className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
                       >
                         <MessageCircle className="w-4 h-4" />
@@ -412,14 +436,42 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
                         animate={{ opacity: 1, height: 'auto' }}
                         className="mt-4 p-4 bg-gray-50 rounded-xl"
                       >
+                        {/* List comments */}
+                        <div className="mb-4 space-y-2">
+                          {(comments[answer.id] || []).length === 0 ? (
+                            <div className="text-gray-400 text-sm">No comments yet.</div>
+                          ) : (
+                            comments[answer.id].map((comment) => (
+                              <div key={comment.id} className="flex items-start gap-2">
+                                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                                  <User className="w-4 h-4 text-gray-500" />
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-gray-800 text-sm">{comment.author.username}</span>
+                                  <span className="ml-2 text-xs text-gray-400">{timeAgo(comment.createdAt)}</span>
+                                  <div className="text-gray-700 text-sm mt-1">{typeof comment.content === 'string' ? comment.content : JSON.stringify(comment.content)}</div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        {/* Add comment form */}
                         <textarea
                           placeholder="Add a comment..."
                           className="w-full p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-[#1f0d38] focus:border-transparent"
                           rows={3}
+                          value={commentInputs[answer.id] || ''}
+                          onChange={e => setCommentInputs(prev => ({ ...prev, [answer.id]: e.target.value }))}
+                          disabled={!!commentLoading[answer.id]}
                         />
+                        {commentError[answer.id] && <div className="text-red-600 text-sm mt-1">{commentError[answer.id]}</div>}
                         <div className="flex justify-end mt-2">
-                          <button className="px-4 py-2 bg-[#1f0d38] text-white rounded-lg hover:bg-[#2d1b4e] transition-colors">
-                            Post Comment
+                          <button
+                            className="px-4 py-2 bg-[#1f0d38] text-white rounded-lg hover:bg-[#2d1b4e] transition-colors disabled:opacity-60"
+                            onClick={() => handlePostComment(answer.id)}
+                            disabled={!!commentLoading[answer.id] || !(commentInputs[answer.id] || '').trim()}
+                          >
+                            {commentLoading[answer.id] ? 'Posting...' : 'Post Comment'}
                           </button>
                         </div>
                       </motion.div>

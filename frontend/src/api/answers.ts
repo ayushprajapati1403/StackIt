@@ -22,4 +22,18 @@ export async function fetchAnswersByQuestionId(questionId: string) {
 	}
 	const data = await response.json();
 	return data.answers || [];
+}
+
+export async function deleteAnswer({ id, token }: { id: string, token: string }) {
+	const response = await fetch(`${API_URL}/api/answers/${id}`, {
+		method: 'DELETE',
+		headers: {
+			Authorization: token
+		}
+	});
+	if (!response.ok) {
+		const errorData = await response.json().catch(() => ({}));
+		throw new Error(errorData.error || errorData.message || 'Failed to delete answer');
+	}
+	return response.json();
 } 

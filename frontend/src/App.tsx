@@ -123,19 +123,28 @@ function App() {
   }, [user]);
 
   useEffect(() => {
-    fetchQuestions()
-      .then(data => {
-        // Map backend data to frontend format
-        setQuestions(data.map((q: any) => ({
-          ...q,
-          author: { username: q.authorUsername, avatar: null },
-          answerCount: q.totalAnswers,
-          acceptedAnswerId: q.acceptedAnswerId,
-        })));
-      })
-      .catch(() => setQuestions([]))
-      .finally(() => setLoadingQuestions(false));
-  }, []);
+    let interval: number | null = null;
+    const fetchAndSetQuestions = () => {
+      fetchQuestions()
+        .then(data => {
+          setQuestions(data.map((q: any) => ({
+            ...q,
+            author: { username: q.authorUsername, avatar: null },
+            answerCount: q.totalAnswers,
+            acceptedAnswerId: q.acceptedAnswerId,
+          })));
+        })
+        .catch(() => setQuestions([]))
+        .finally(() => setLoadingQuestions(false));
+    };
+    if (currentPage === 'home') {
+      fetchAndSetQuestions();
+      interval = setInterval(fetchAndSetQuestions, 5000); // Poll every 5 seconds
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentPage]);
 
   useEffect(() => {
     fetchTags()
@@ -184,7 +193,7 @@ function App() {
           onSignup={navigateToSignup}
           onLogout={handleLogout}
         />
-        <AskQuestionPage />
+        <AskQuestionPage setCurrentPage={setCurrentPage} />
       </div>
     );
   }

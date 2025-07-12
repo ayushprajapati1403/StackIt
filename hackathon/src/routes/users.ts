@@ -33,7 +33,8 @@ router.get('/me/questions', authenticateToken, requireRole(['USER', 'ADMIN']), a
 			title: question.title,
 			createdAt: question.createdAt,
 			tags: question.tags,
-			answerCount: question.answers.length
+			answerCount: question.answers.length,
+			description: question.description
 		}));
 
 		res.json(questionsWithCounts);

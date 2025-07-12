@@ -109,7 +109,8 @@ router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (
 				question: {
 					select: {
 						id: true,
-						title: true
+						title: true,
+						acceptedId: true
 					}
 				}
 			}
@@ -121,6 +122,14 @@ router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (
 
 		if (answer.authorId !== userId) {
 			return res.status(403).json({ error: 'Only the answer author can delete the answer' });
+		}
+
+		// If this answer is the accepted answer for the question, unset acceptedId first
+		if (answer.question.acceptedId === answer.id) {
+			await prisma.question.update({
+				where: { id: answer.question.id },
+				data: { acceptedId: null }
+			});
 		}
 
 		// Delete the answer (cascade will handle votes)
@@ -138,6 +147,29 @@ router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (
 		});
 	} catch (error) {
 		console.error('Error deleting answer:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// GET /api/answers/:id/comments - Get all comments for an answer
+router.get('/:id/comments', async (req, res) => {
+	const { id } = req.params;
+	try {
+		const comments = await prisma.comment.findMany({
+			where: { answerId: id },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true
+					}
+				}
+			},
+			orderBy: { createdAt: 'asc' }
+		});
+		res.json(comments);
+	} catch (error) {
+		console.error('Error fetching comments:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 });
