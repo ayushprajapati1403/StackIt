@@ -42,11 +42,49 @@ router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: 
 				question: {
 					select: {
 						id: true,
-						title: true
+						title: true,
+						authorId: true
 					}
 				}
 			}
 		});
+
+		// Create notification for question owner (if not answering their own question)
+		if (answer.question.authorId !== userId) {
+			await prisma.notification.create({
+				data: {
+					type: 'ANSWERED',
+					message: `${answer.author.username} answered your question: "${answer.question.title}"`,
+					userId: answer.question.authorId
+				}
+			});
+		}
+
+		// Check for @mentions in the answer content and create MENTIONED notifications
+		const contentString = JSON.stringify(answer.content);
+		const mentionRegex = /@(\w+)/g;
+		const mentions = contentString.match(mentionRegex);
+
+		if (mentions) {
+			for (const mention of mentions) {
+				const username = mention.substring(1); // Remove @ symbol
+
+				// Find user by username
+				const mentionedUser = await prisma.user.findUnique({
+					where: { username }
+				});
+
+				if (mentionedUser && mentionedUser.id !== userId) {
+					await prisma.notification.create({
+						data: {
+							type: 'MENTIONED',
+							message: `${answer.author.username} mentioned you in an answer to: "${answer.question.title}"`,
+							userId: mentionedUser.id
+						}
+					});
+				}
+			}
+		}
 
 		res.status(201).json(answer);
 	} catch (error) {
