@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// @ts-expect-error: DOMPurify may not have types, but is needed for sanitizing HTML
 import DOMPurify from 'dompurify';
 import { motion } from 'framer-motion';
 import {
@@ -18,6 +17,8 @@ import {
 } from 'lucide-react';
 import { WYSIWYGEditor } from './WYSIWYGEditor';
 import { fetchQuestionById } from '../api/questions';
+import { postAnswer } from '../api/answers';
+import { postVote } from '../api/votes';
 
 interface Answer {
   id: string;
@@ -68,6 +69,10 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
   const [error, setError] = useState<string | null>(null);
   const [newAnswer, setNewAnswer] = useState('');
   const [showComments, setShowComments] = useState<string | null>(null);
+  const [answerLoading, setAnswerLoading] = useState(false);
+  const [answerError, setAnswerError] = useState<string | null>(null);
+  const [voteLoading, setVoteLoading] = useState<string | null>(null); // answerId being voted
+  const [voteError, setVoteError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -135,6 +140,81 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
     'bg-purple-100 text-purple-800',
     'bg-red-100 text-red-800',
   ];
+
+  // Helper to refresh question (fetch latest answers/votes)
+  const refreshQuestion = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchQuestionById(questionId);
+      // (same mapping as in useEffect)
+      setQuestion({
+        id: typeof data.id === 'string' ? data.id : '',
+        title: typeof data.title === 'string' ? data.title : '',
+        description: typeof data.description === 'string' ? (data.description ?? '') : JSON.stringify(data.description ?? ''),
+        tags: Array.isArray(data.tags) ? (data.tags as { name: string }[]).map((tag) => tag.name) : [],
+        author: { username: data.author?.username ?? '', avatar: '' },
+        createdAt: typeof data.createdAt === 'string' ? data.createdAt : '',
+        votes: typeof data.votes === 'number' ? data.votes : 0,
+        views: typeof data.views === 'number' ? data.views : 0,
+        answers: Array.isArray(data.answers) ? data.answers.map((ans: { id?: string; content?: string; author?: { username?: string }; createdAt?: string; votes?: { value?: number }[]; isAccepted?: boolean }) => ({
+          id: typeof ans.id === 'string' ? ans.id : '',
+          content: typeof ans.content === 'string' ? (ans.content ?? '') : JSON.stringify(ans.content ?? ''),
+          author: { username: ans.author?.username ?? '', avatar: '' },
+          createdAt: typeof ans.createdAt === 'string' ? ans.createdAt : '',
+          votes: Array.isArray(ans.votes) ? ans.votes.reduce((sum, v) => sum + (v.value || 0), 0) : 0,
+          isAccepted: !!(ans.isAccepted || (data.acceptedAnswerId && ans.id === data.acceptedAnswerId)),
+          comments: [] as never[],
+        })) : [],
+        isOwner: false,
+      });
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message || 'Failed to load question');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Post answer handler
+  const handlePostAnswer = async () => {
+    setAnswerLoading(true);
+    setAnswerError(null);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setAnswerError('You must be logged in to post an answer.');
+      setAnswerLoading(false);
+      return;
+    }
+    try {
+      await postAnswer({ questionId, content: newAnswer, token });
+      setNewAnswer('');
+      await refreshQuestion();
+    } catch {
+      setAnswerError('Failed to post answer. Please try again.');
+    } finally {
+      setAnswerLoading(false);
+    }
+  };
+
+  // Vote handler
+  const handleVote = async (answerId: string, value: 1 | -1) => {
+    setVoteLoading(answerId);
+    setVoteError(null);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setVoteError('You must be logged in to vote.');
+      setVoteLoading(null);
+      return;
+    }
+    try {
+      await postVote({ answerId, value, token });
+      await refreshQuestion();
+    } catch {
+      setVoteError('Failed to vote. Please try again.');
+    } finally {
+      setVoteLoading(null);
+    }
+  };
 
   if (loading) {
     return <div className="text-center py-12 text-lg text-gray-500">Loading question...</div>;
@@ -289,21 +369,34 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
                     </div>
 
                     <div className="prose max-w-none mb-4">
-                      <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                        {answer.content}
-                      </p>
+                      <div
+                        className="text-gray-700 leading-relaxed"
+                        dangerouslySetInnerHTML={{
+                          __html: DOMPurify.sanitize(answer.content)
+                        }}
+                      />
                     </div>
 
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                          disabled={!!voteLoading}
+                          onClick={() => handleVote(answer.id, 1)}
+                        >
                           <ArrowUp className="w-4 h-4 text-gray-600" />
                         </button>
                         <span className="font-medium">{answer.votes}</span>
-                        <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                          disabled={!!voteLoading}
+                          onClick={() => handleVote(answer.id, -1)}
+                        >
                           <ArrowDown className="w-4 h-4 text-gray-600" />
                         </button>
                       </div>
+                      {voteLoading === answer.id && <span className="text-xs text-gray-400">Voting...</span>}
+                      {voteError && <span className="text-xs text-red-500">{voteError}</span>}
                       <button
                         onClick={() => setShowComments(showComments === answer.id ? null : answer.id)}
                         className="flex items-center gap-2 px-3 py-1 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
@@ -351,15 +444,16 @@ export const QuestionDetailPage: React.FC<QuestionDetailPageProps> = ({ question
                 placeholder="Write your answer here... Be specific and provide examples if possible."
                 minHeight="200px"
               />
-
+              {answerError && <div className="text-red-600 font-semibold mb-2">{answerError}</div>}
               <div className="flex justify-end mt-6">
                 <motion.button
-                  className="bg-gradient-to-r from-[#1f0d38] to-purple-600 hover:from-[#2d1b4e] hover:to-purple-700 text-white px-8 py-3 rounded-2xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-[#1f0d38]/25 flex items-center gap-2"
+                  className="bg-gradient-to-r from-[#1f0d38] to-purple-600 hover:from-[#2d1b4e] hover:to-purple-700 text-white px-8 py-3 rounded-2xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-[#1f0d38]/25 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={handlePostAnswer}
+                  disabled={answerLoading || !newAnswer.trim()}
                 >
-                  <Send className="w-5 h-5" />
-                  📩 Post Answer
+                  {answerLoading ? 'Posting...' : (<><Send className="w-5 h-5" />📩 Post Answer</>)}
                 </motion.button>
               </div>
             </motion.div>
