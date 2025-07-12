@@ -124,4 +124,47 @@ router.get('/me/comments', authenticateToken, requireRole(['USER', 'ADMIN']), as
 	}
 });
 
+// GET /api/users/me - Get current user's profile
+router.get('/me', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const userId = req.user!.userId;
+
+	try {
+		const user = await prisma.user.findUnique({
+			where: { id: userId },
+			select: {
+				id: true,
+				username: true,
+				email: true,
+				role: true,
+				createdAt: true,
+				_count: {
+					select: {
+						questions: true,
+						answers: true
+					}
+				}
+			}
+		});
+
+		if (!user) {
+			return res.status(404).json({ error: 'User not found' });
+		}
+
+		const userProfile = {
+			id: user.id,
+			username: user.username,
+			email: user.email,
+			role: user.role,
+			createdAt: user.createdAt,
+			totalQuestions: user._count.questions,
+			totalAnswers: user._count.answers
+		};
+
+		res.json(userProfile);
+	} catch (error) {
+		console.error('Error fetching user profile:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
 export default router; 
