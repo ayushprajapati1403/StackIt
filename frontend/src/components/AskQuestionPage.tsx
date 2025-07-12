@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { WYSIWYGEditor } from './WYSIWYGEditor';
 import { postQuestion } from '../api/questions';
+import { suggestTags } from '../api/tags';
 
 interface Tag {
   id: string;
@@ -37,6 +38,9 @@ export const AskQuestionPage: React.FC<AskQuestionPageProps> = ({ setCurrentPage
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [tagSearch, setTagSearch] = useState('');
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,6 +60,26 @@ export const AskQuestionPage: React.FC<AskQuestionPageProps> = ({ setCurrentPage
 
   const removeTag = (tagId: string) => {
     setSelectedTags(selectedTags.filter(tag => tag.id !== tagId));
+  };
+
+  const handleSuggestTags = async () => {
+    setSuggestLoading(true);
+    setSuggestError(null);
+    try {
+      const tags = await suggestTags({ title, description });
+      setSuggestedTags(tags);
+    } catch (err) {
+      setSuggestError((err as { message?: string }).message || 'Failed to suggest tags');
+      setSuggestedTags([]);
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const handleAddSuggestedTag = (tagName: string) => {
+    if (!selectedTags.find(t => t.name === tagName)) {
+      setSelectedTags([...selectedTags, { id: tagName, name: tagName, color: '' }]);
+    }
   };
 
   const handleSubmit = async () => {
@@ -224,74 +248,63 @@ export const AskQuestionPage: React.FC<AskQuestionPageProps> = ({ setCurrentPage
           >
             {/* Tag Selector */}
             <div className="bg-white rounded-3xl shadow-xl p-6 border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Tags</h3>
-
-              {/* Selected Tags */}
-              {selectedTags.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {selectedTags.map((tag) => (
-                    <motion.span
-                      key={tag.id}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className={`${tag.color} px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2`}
-                    >
-                      {tag.name}
-                      <button
-                        onClick={() => removeTag(tag.id)}
-                        className="hover:bg-black/10 rounded-full p-0.5"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </motion.span>
-                  ))}
-                </div>
-              )}
-
-              {/* Tag Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  value={tagSearch}
-                  onChange={(e) => {
-                    setTagSearch(e.target.value);
-                    setShowTagDropdown(true);
-                  }}
-                  onFocus={() => setShowTagDropdown(true)}
-                  placeholder="Search tags..."
-                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#1f0d38] focus:outline-none transition-all duration-300"
-                />
+              <h2 className="block text-lg font-semibold text-gray-900 mb-3">Tags</h2>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedTags.map(tag => (
+                  <span key={tag.id} className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {tag.name}
+                    <button onClick={() => removeTag(tag.id)} className="ml-2 text-blue-600 hover:text-blue-900">&times;</button>
+                  </span>
+                ))}
               </div>
-
-              {/* Tag Dropdown */}
-              {showTagDropdown && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto"
-                >
-                  {filteredTags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => addTag(tag)}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                    >
-                      <span className={`${tag.color} px-2 py-1 rounded-full text-xs font-medium`}>
-                        {tag.name}
-                      </span>
-                    </button>
-                  ))}
-                  {filteredTags.length === 0 && tagSearch && (
-                    <div className="px-4 py-3 text-gray-500 text-center">
-                      <p>No matching tags found</p>
-                      <button className="text-[#1f0d38] hover:underline mt-1 flex items-center gap-1 mx-auto">
-                        <Plus className="w-3 h-3" />
-                        Suggest "{tagSearch}" as new tag
-                      </button>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={tagSearch}
+                    onChange={e => setTagSearch(e.target.value)}
+                    onFocus={() => setShowTagDropdown(true)}
+                    placeholder="Search or add tags..."
+                    className="w-full px-4 py-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1f0d38]"
+                  />
+                  {showTagDropdown && filteredTags.length > 0 && (
+                    <div className="absolute z-10 bg-white border rounded-xl shadow-lg mt-1 w-full max-h-40 overflow-y-auto">
+                      {filteredTags.map(tag => (
+                        <div
+                          key={tag.id}
+                          className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+                          onClick={() => addTag(tag)}
+                        >
+                          {tag.name}
+                        </div>
+                      ))}
                     </div>
                   )}
-                </motion.div>
+                </div>
+                <button
+                  type="button"
+                  className="px-4 py-2 bg-gradient-to-r from-[#1f0d38] to-purple-600 text-white rounded-xl font-semibold hover:from-[#2d1b4e] hover:to-purple-700 transition-all duration-300 disabled:opacity-60"
+                  onClick={handleSuggestTags}
+                  disabled={suggestLoading || !title || !description}
+                >
+                  {suggestLoading ? 'Suggesting...' : 'Suggest Tags (AI)'}
+                </button>
+              </div>
+              {suggestError && <div className="text-red-600 mb-2">{suggestError}</div>}
+              {suggestedTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="text-sm text-gray-600 mr-2">Suggestions:</span>
+                  {suggestedTags.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors"
+                      onClick={() => handleAddSuggestedTag(tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
