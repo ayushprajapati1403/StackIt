@@ -7,7 +7,7 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // POST /api/questions - Create a new question
-router.post('/', authenticateToken, requireRole('USER'), async (req: AuthRequest, res) => {
+router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
 	const { title, description, tags } = req.body;
 	const userId = req.user!.userId;
 
@@ -105,6 +105,263 @@ router.get('/', async (req, res) => {
 		res.json(questionsWithCounts);
 	} catch (error) {
 		console.error('Error fetching questions:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// GET /api/questions/:id - Get specific question with full details
+router.get('/:id', async (req, res) => {
+	const { id } = req.params;
+
+	try {
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true,
+				answers: {
+					include: {
+						author: {
+							select: {
+								id: true,
+								username: true
+							}
+						},
+						votes: true
+					},
+					orderBy: {
+						createdAt: 'desc'
+					}
+				},
+				accepted: {
+					select: {
+						id: true
+					}
+				}
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		// Calculate vote counts for each answer
+		const questionWithVoteCounts = {
+			...question,
+			answers: question.answers.map(answer => ({
+				...answer,
+				voteCount: answer.votes.reduce((sum, vote) => sum + vote.value, 0)
+			}))
+		};
+
+		res.json(questionWithVoteCounts);
+	} catch (error) {
+		console.error('Error fetching question:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// POST /api/questions/:id/accept - Accept an answer (question author only)
+router.post('/:id/accept', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const { answerId } = req.body;
+	const userId = req.user!.userId;
+
+	if (!answerId) {
+		return res.status(400).json({ error: 'answerId is required' });
+	}
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true
+					}
+				}
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.author.id !== userId) {
+			return res.status(403).json({ error: 'Only the question author can accept answers' });
+		}
+
+		// Check if the answer exists and belongs to this question
+		const answer = await prisma.answer.findFirst({
+			where: {
+				id: answerId,
+				questionId: id
+			}
+		});
+
+		if (!answer) {
+			return res.status(404).json({ error: 'Answer not found or does not belong to this question' });
+		}
+
+		// Update the question with the accepted answer
+		const updatedQuestion = await prisma.question.update({
+			where: { id },
+			data: {
+				acceptedId: answerId
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true,
+				accepted: {
+					select: {
+						id: true,
+						content: true,
+						author: {
+							select: {
+								id: true,
+								username: true
+							}
+						}
+					}
+				}
+			}
+		});
+
+		res.json(updatedQuestion);
+	} catch (error) {
+		console.error('Error accepting answer:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// DELETE /api/questions/:id - Delete a question (author only)
+router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const userId = req.user!.userId;
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			select: {
+				id: true,
+				title: true,
+				authorId: true
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.authorId !== userId) {
+			return res.status(403).json({ error: 'Only the question author can delete the question' });
+		}
+
+		// Delete the question (cascade will handle answers and votes)
+		await prisma.question.delete({
+			where: { id }
+		});
+
+		res.json({
+			message: 'Question deleted successfully',
+			deletedQuestion: {
+				id: question.id,
+				title: question.title
+			}
+		});
+	} catch (error) {
+		console.error('Error deleting question:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// PUT /api/questions/:id - Update a question (author only)
+router.put('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const { title, description, tags } = req.body;
+	const userId = req.user!.userId;
+
+	if (!title || !description) {
+		return res.status(400).json({ error: 'Title and description are required' });
+	}
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				tags: true
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.authorId !== userId) {
+			return res.status(403).json({ error: 'Only the question author can update the question' });
+		}
+
+		// Handle tags - create new ones if they don't exist
+		const tagIds: string[] = [];
+
+		if (tags && Array.isArray(tags)) {
+			for (const tagName of tags) {
+				let tag = await prisma.tag.findUnique({
+					where: { name: tagName }
+				});
+
+				if (!tag) {
+					tag = await prisma.tag.create({
+						data: { name: tagName }
+					});
+				}
+
+				tagIds.push(tag.id);
+			}
+		}
+
+		// Update the question with new tags
+		const updatedQuestion = await prisma.question.update({
+			where: { id },
+			data: {
+				title,
+				description,
+				tags: {
+					set: [], // Disconnect all existing tags
+					connect: tagIds.map(id => ({ id })) // Connect new tags
+				}
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true
+			}
+		});
+
+		res.json(updatedQuestion);
+	} catch (error) {
+		console.error('Error updating question:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 });
