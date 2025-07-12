@@ -35,11 +35,19 @@ export async function login({ email, password }: { email: string; password: stri
 }
 
 export async function logout() {
+	const token = localStorage.getItem('token');
 	const response = await fetch(`${API_URL}/api/auth/logout`, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
+			...(token && { 'Authorization': token })
 		},
 	});
+	
+	if (!response.ok) {
+		const errorData = await response.json().catch(() => ({}));
+		throw new Error(errorData.error || errorData.message || 'Logout failed');
+	}
+	
 	return response.json();
 } 

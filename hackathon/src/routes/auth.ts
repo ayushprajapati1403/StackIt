@@ -37,7 +37,15 @@ router.post('/signup', async (req, res) => {
 			},
 		});
 		const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-		res.status(201).json({ token: `Bearer ${token}` });
+		res.status(201).json({ 
+			token: `Bearer ${token}`,
+			user: {
+				id: user.id,
+				username: user.username,
+				email: user.email,
+				role: user.role
+			}
+		});
 	} catch (error) {
 		res.status(500).json({ error: 'Internal server error' });
 	}
@@ -59,7 +67,15 @@ router.post('/login', async (req, res) => {
 			return res.status(401).json({ error: 'Invalid credentials' });
 		}
 		const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-		res.json({ token: `Bearer ${token}` });
+		res.json({ 
+			token: `Bearer ${token}`,
+			user: {
+				id: user.id,
+				username: user.username,
+				email: user.email,
+				role: user.role
+			}
+		});
 	} catch (error) {
 		res.status(500).json({ error: 'Internal server error' });
 	}

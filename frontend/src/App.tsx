@@ -16,6 +16,8 @@ import { LoginPage } from './components/LoginPage';
 import { SignupPage } from './components/SignupPage';
 import { fetchTags } from './api/tags';
 import { fetchQuestions } from './api/questions';
+import { logout } from './api/auth';
+import { fetchUserProfile } from './api/users';
 
 function App() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,7 +52,7 @@ function App() {
     if (userData.token) {
       localStorage.setItem('token', userData.token);
     }
-    setUser(userData);
+    setUser(userData.user || userData);
     setCurrentPage('home');
   };
 
@@ -58,15 +60,21 @@ function App() {
     if (userData.token) {
       localStorage.setItem('token', userData.token);
     }
-    setUser(userData);
+    setUser(userData.user || userData);
     setCurrentPage('home');
   };
 
   const handleLogout = async () => {
-    await logout();
-    localStorage.removeItem('token');
-    setUser(null);
-    setCurrentPage('home');
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Continue with logout even if the API call fails
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+      setCurrentPage('home');
+    }
   };
 
   const navigateToLogin = () => {
@@ -87,10 +95,21 @@ function App() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token && !user) {
-      // Optionally decode the token for user info, or just set a dummy user object
-      setUser({ token }); // You can expand this with more info if you decode the JWT
+      // Fetch user profile to get user information
+      fetchUserProfile(token)
+        .then(userData => {
+          setUser({
+            ...userData,
+            token
+          });
+        })
+        .catch(error => {
+          console.error('Failed to fetch user profile:', error);
+          // If fetching user profile fails, remove the token
+          localStorage.removeItem('token');
+        });
     }
-  }, []);
+  }, []); // Empty dependency array to run only once on mount
 
   useEffect(() => {
     if (!user) return;
