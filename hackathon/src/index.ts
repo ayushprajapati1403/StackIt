@@ -8,6 +8,7 @@ import votesRoutes from './routes/votes';
 import tagsRoutes from './routes/tags';
 import notificationsRoutes from './routes/notifications';
 import usersRoutes from './routes/users';
+import commentsRoutes from './routes/comments';
 import adminRoutes from './routes/admin';
 import { authenticateToken } from './middleware/auth';
 import { requireRole } from './middleware/role';
@@ -24,6 +25,7 @@ app.use('/api/votes', votesRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/comments', commentsRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => {

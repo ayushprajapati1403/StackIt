@@ -82,4 +82,46 @@ router.get('/me/answers', authenticateToken, requireRole(['USER', 'ADMIN']), asy
 	}
 });
 
+// GET /api/users/me/comments - Get current user's comments
+router.get('/me/comments', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const userId = req.user!.userId;
+
+	try {
+		const comments = await prisma.comment.findMany({
+			where: {
+				authorId: userId
+			},
+			include: {
+				answer: {
+					include: {
+						question: {
+							select: {
+								id: true,
+								title: true
+							}
+						}
+					}
+				}
+			},
+			orderBy: {
+				createdAt: 'desc'
+			}
+		});
+
+		const commentsWithQuestionInfo = comments.map(comment => ({
+			id: comment.id,
+			content: comment.content,
+			createdAt: comment.createdAt,
+			questionId: comment.answer.question.id,
+			questionTitle: comment.answer.question.title,
+			answerId: comment.answerId
+		}));
+
+		res.json(commentsWithQuestionInfo);
+	} catch (error) {
+		console.error('Error fetching user comments:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
 export default router; 
