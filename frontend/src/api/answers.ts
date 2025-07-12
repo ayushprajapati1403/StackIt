@@ -36,4 +36,20 @@ export async function deleteAnswer({ id, token }: { id: string, token: string })
 		throw new Error(errorData.error || errorData.message || 'Failed to delete answer');
 	}
 	return response.json();
+}
+
+export async function acceptAnswer({ questionId, answerId, token }: { questionId: string, answerId: string, token: string }) {
+	const response = await fetch(`${API_URL}/api/questions/${questionId}/accept`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: token
+		},
+		body: JSON.stringify({ answerId })
+	});
+	if (!response.ok) {
+		const errorData = await response.json().catch(() => ({}));
+		throw new Error(errorData.error || errorData.message || 'Failed to accept answer');
+	}
+	return response.json();
 } 

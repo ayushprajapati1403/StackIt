@@ -16,11 +16,12 @@ import {
   Eye,
   ChevronRight,
   Plus,
-  X
+  X,
+  CheckCircle
 } from 'lucide-react';
 import { fetchUserProfile, fetchUserQuestions, fetchUserAnswers, fetchUserComments } from '../api/users';
 import { updateQuestion, deleteQuestion } from '../api/questions';
-import { deleteAnswer } from '../api/answers';
+import { deleteAnswer, acceptAnswer } from '../api/answers';
 import { deleteComment } from '../api/comments';
 
 interface UserProfilePageProps {
@@ -181,6 +182,21 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
     }
   };
 
+  const handleAcceptAnswer = async (answerId: string, questionId: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      await acceptAnswer({ questionId, answerId, token });
+      setUserAnswers(prev => prev.map(a => a.id === answerId ? { ...a, isAccepted: true } : a));
+    } catch (err: unknown) {
+      if (typeof err === 'object' && err !== null && 'message' in err) {
+        alert((err as { message?: string }).message || 'Failed to accept answer');
+      } else {
+        alert('Failed to accept answer');
+      }
+    }
+  };
+
   const handleDeleteComment = async (id: string) => {
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -212,7 +228,17 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
       fetchUserComments(token)
     ])
       .then(([profile, questions, answers, comments]) => {
-        setUserProfile(profile);
+        setUserProfile({
+          id: profile.id,
+          username: profile.username,
+          email: profile.email,
+          avatar: profile.avatar || '',
+          role: profile.role,
+          createdAt: profile.createdAt,
+          totalQuestions: profile.totalQuestions,
+          totalAnswers: profile.totalAnswers,
+          // Add more fields if backend provides them
+        });
         setUserQuestions(questions);
         setUserAnswers(answers);
         setUserComments(comments);
@@ -538,6 +564,14 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ setCurrentPage
                             <button className="flex items-center gap-1 text-[#1f0d38] hover:underline">
                               View Question <ExternalLink className="w-3 h-3" />
                             </button>
+                            {!answer.isAccepted && (
+                              <button
+                                className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors"
+                                onClick={() => handleAcceptAnswer(answer.id, answer.questionId)}
+                              >
+                                <CheckCircle className="w-4 h-4" /> Accept
+                              </button>
+                            )}
                             <button
                               className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                               onClick={() => handleDeleteAnswer(answer.id)}
