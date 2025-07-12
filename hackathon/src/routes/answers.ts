@@ -93,4 +93,53 @@ router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: 
 	}
 });
 
+// DELETE /api/answers/:id - Delete an answer (author only)
+router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const userId = req.user!.userId;
+
+	try {
+		// Check if the answer exists and user is the author
+		const answer = await prisma.answer.findUnique({
+			where: { id },
+			select: {
+				id: true,
+				content: true,
+				authorId: true,
+				question: {
+					select: {
+						id: true,
+						title: true
+					}
+				}
+			}
+		});
+
+		if (!answer) {
+			return res.status(404).json({ error: 'Answer not found' });
+		}
+
+		if (answer.authorId !== userId) {
+			return res.status(403).json({ error: 'Only the answer author can delete the answer' });
+		}
+
+		// Delete the answer (cascade will handle votes)
+		await prisma.answer.delete({
+			where: { id }
+		});
+
+		res.json({
+			message: 'Answer deleted successfully',
+			deletedAnswer: {
+				id: answer.id,
+				questionId: answer.question.id,
+				questionTitle: answer.question.title
+			}
+		});
+	} catch (error) {
+		console.error('Error deleting answer:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
 export default router; 

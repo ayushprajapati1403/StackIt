@@ -248,4 +248,122 @@ router.post('/:id/accept', authenticateToken, requireRole(['USER', 'ADMIN']), as
 	}
 });
 
+// DELETE /api/questions/:id - Delete a question (author only)
+router.delete('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const userId = req.user!.userId;
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			select: {
+				id: true,
+				title: true,
+				authorId: true
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.authorId !== userId) {
+			return res.status(403).json({ error: 'Only the question author can delete the question' });
+		}
+
+		// Delete the question (cascade will handle answers and votes)
+		await prisma.question.delete({
+			where: { id }
+		});
+
+		res.json({
+			message: 'Question deleted successfully',
+			deletedQuestion: {
+				id: question.id,
+				title: question.title
+			}
+		});
+	} catch (error) {
+		console.error('Error deleting question:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// PUT /api/questions/:id - Update a question (author only)
+router.put('/:id', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const { title, description, tags } = req.body;
+	const userId = req.user!.userId;
+
+	if (!title || !description) {
+		return res.status(400).json({ error: 'Title and description are required' });
+	}
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				tags: true
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.authorId !== userId) {
+			return res.status(403).json({ error: 'Only the question author can update the question' });
+		}
+
+		// Handle tags - create new ones if they don't exist
+		const tagIds: string[] = [];
+
+		if (tags && Array.isArray(tags)) {
+			for (const tagName of tags) {
+				let tag = await prisma.tag.findUnique({
+					where: { name: tagName }
+				});
+
+				if (!tag) {
+					tag = await prisma.tag.create({
+						data: { name: tagName }
+					});
+				}
+
+				tagIds.push(tag.id);
+			}
+		}
+
+		// Update the question with new tags
+		const updatedQuestion = await prisma.question.update({
+			where: { id },
+			data: {
+				title,
+				description,
+				tags: {
+					set: [], // Disconnect all existing tags
+					connect: tagIds.map(id => ({ id })) // Connect new tags
+				}
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true
+			}
+		});
+
+		res.json(updatedQuestion);
+	} catch (error) {
+		console.error('Error updating question:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
 export default router; 
