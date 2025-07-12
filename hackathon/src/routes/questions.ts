@@ -167,4 +167,85 @@ router.get('/:id', async (req, res) => {
 	}
 });
 
+// POST /api/questions/:id/accept - Accept an answer (question author only)
+router.post('/:id/accept', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
+	const { id } = req.params;
+	const { answerId } = req.body;
+	const userId = req.user!.userId;
+
+	if (!answerId) {
+		return res.status(400).json({ error: 'answerId is required' });
+	}
+
+	try {
+		// Check if the question exists and user is the author
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true
+					}
+				}
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		if (question.author.id !== userId) {
+			return res.status(403).json({ error: 'Only the question author can accept answers' });
+		}
+
+		// Check if the answer exists and belongs to this question
+		const answer = await prisma.answer.findFirst({
+			where: {
+				id: answerId,
+				questionId: id
+			}
+		});
+
+		if (!answer) {
+			return res.status(404).json({ error: 'Answer not found or does not belong to this question' });
+		}
+
+		// Update the question with the accepted answer
+		const updatedQuestion = await prisma.question.update({
+			where: { id },
+			data: {
+				acceptedId: answerId
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true,
+				accepted: {
+					select: {
+						id: true,
+						content: true,
+						author: {
+							select: {
+								id: true,
+								username: true
+							}
+						}
+					}
+				}
+			}
+		});
+
+		res.json(updatedQuestion);
+	} catch (error) {
+		console.error('Error accepting answer:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
 export default router; 
