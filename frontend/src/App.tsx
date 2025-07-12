@@ -172,8 +172,8 @@ function App() {
     );
   }
 
-  // Redirect to login if not authenticated and trying to access protected pages
-  if (!user && ['ask', 'question', 'profile', 'notifications', 'admin'].includes(currentPage)) {
+  // Redirect to login if not authenticated and trying to access protected pages (except home/question)
+  if (!user && ['ask', 'profile', 'notifications', 'admin'].includes(currentPage)) {
     return (
       <LoginPage
         onLogin={handleLogin}
@@ -265,132 +265,90 @@ function App() {
         onLogout={handleLogout}
       />
 
-      {/* Show different content based on auth state */}
-      {user ? (
-        <>
-          {/* Hero Section */}
-          <HeroSection onStartExploring={handleStartExploring} onViewQuestions={handleViewQuestions} />
+      {/* Hero Section (always visible) */}
+      <HeroSection onStartExploring={handleStartExploring} onViewQuestions={handleViewQuestions} />
 
-          {/* Main Content */}
-          <main ref={questionsSectionRef} className="max-w-6xl mx-auto px-4 py-8">
-            {/* Search Section */}
-            <motion.div
-              className="mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <SearchBar
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
-              />
-            </motion.div>
+      {/* Main Content: Questions Feed (always visible) */}
+      <main ref={questionsSectionRef} className="max-w-6xl mx-auto px-4 py-8">
+        {/* Search Section */}
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <SearchBar
+            searchTerm={searchTerm}
+            onSearchChange={setSearchTerm}
+          />
+        </motion.div>
 
-            {/* Tag Filter */}
-            <motion.div
-              className="mb-8"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
-            >
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Filter by Tags</h2>
-              <TagFilter
-                tags={availableTags}
-                selectedTags={selectedTags}
-                onTagToggle={handleTagToggle}
-              />
-            </motion.div>
+        {/* Tag Filter */}
+        <motion.div
+          className="mb-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Filter by Tags</h2>
+          <TagFilter
+            tags={availableTags}
+            selectedTags={selectedTags}
+            onTagToggle={handleTagToggle}
+          />
+        </motion.div>
 
-            {/* Results Header */}
-            <motion.div
-              className="flex justify-between items-center mb-6"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              <h2 className="text-2xl font-bold text-gray-900">
-                Recent Questions
-                <span className="text-[#1f0d38] ml-2">({filteredQuestions.length})</span>
-              </h2>
-            </motion.div>
+        {/* Results Header */}
+        <motion.div
+          className="flex justify-between items-center mb-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+        >
+          <h2 className="text-2xl font-bold text-gray-900">
+            Recent Questions
+            <span className="text-[#1f0d38] ml-2">({filteredQuestions.length})</span>
+          </h2>
+        </motion.div>
 
-            {/* Questions Feed */}
-            {loadingQuestions ? (
-              <div className="text-center py-12 text-lg text-gray-500">Loading questions...</div>
+        {/* Questions Feed */}
+        {loadingQuestions ? (
+          <div className="text-center py-12 text-lg text-gray-500">Loading questions...</div>
+        ) : (
+          <div className="space-y-6">
+            {filteredQuestions.length > 0 ? (
+              filteredQuestions.map((question, index) => (
+                <div key={question.id} onClick={() => {
+                  if (question.id) {
+                    setSelectedQuestionId(question.id);
+                    setCurrentPage('question');
+                  }
+                }}>
+                  <QuestionCard
+                    question={question}
+                    index={index}
+                  />
+                </div>
+              ))
             ) : (
-              <div className="space-y-6">
-                {filteredQuestions.length > 0 ? (
-                  filteredQuestions.map((question, index) => (
-                    <div key={question.id} onClick={() => {
-                      if (question.id) {
-                        setSelectedQuestionId(question.id);
-                        setCurrentPage('question');
-                      }
-                    }}>
-                      <QuestionCard
-                        question={question}
-                        index={index}
-                      />
-                    </div>
-                  ))
-                ) : (
-                  <motion.div
-                    className="text-center py-12"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                  >
-                    <p className="text-gray-500 text-lg">No questions found matching your criteria.</p>
-                    <p className="text-gray-400 mt-2">Try adjusting your search or tags.</p>
-                  </motion.div>
-                )}
-              </div>
+              <motion.div
+                className="text-center py-12"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <p className="text-gray-500 text-lg">No questions found matching your criteria.</p>
+                <p className="text-gray-400 mt-2">Try adjusting your search or tags.</p>
+              </motion.div>
             )}
-          </main>
-
-          {/* Floating Action Button */}
-          <div onClick={() => setCurrentPage('ask')}>
-            <FloatingActionButton />
           </div>
-        </>
-      ) : (
-        <>
-          {/* Hero Section for non-authenticated users */}
-          <HeroSection />
+        )}
+      </main>
 
-          {/* Public content or call-to-action */}
-          <main className="max-w-6xl mx-auto px-4 py-8">
-            <motion.div
-              className="text-center py-12"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Join StackIt Community
-              </h2>
-              <p className="text-gray-600 text-lg mb-8 max-w-2xl mx-auto">
-                Connect with thousands of developers, ask questions, share knowledge, and grow together.
-              </p>
-              <div className="flex gap-4 justify-center">
-                <motion.button
-                  onClick={navigateToSignup}
-                  className="bg-gradient-to-r from-[#1f0d38] to-purple-600 hover:from-[#2d1b4e] hover:to-purple-700 text-white px-8 py-3 rounded-2xl font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  Get Started Free
-                </motion.button>
-                <motion.button
-                  onClick={navigateToLogin}
-                  className="border-2 border-[#1f0d38] text-[#1f0d38] hover:bg-[#1f0d38] hover:text-white px-8 py-3 rounded-2xl font-semibold transition-all duration-300"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  Sign In
-                </motion.button>
-              </div>
-            </motion.div>
-          </main>
-        </>
+      {/* Floating Action Button (only for logged in users) */}
+      {user && (
+        <div onClick={() => setCurrentPage('ask')}>
+          <FloatingActionButton />
+        </div>
       )}
 
       {/* Animated Background Elements */}
