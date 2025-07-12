@@ -7,7 +7,7 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // POST /api/questions - Create a new question
-router.post('/', authenticateToken, requireRole('USER'), async (req: AuthRequest, res) => {
+router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: AuthRequest, res) => {
 	const { title, description, tags } = req.body;
 	const userId = req.user!.userId;
 
@@ -105,6 +105,64 @@ router.get('/', async (req, res) => {
 		res.json(questionsWithCounts);
 	} catch (error) {
 		console.error('Error fetching questions:', error);
+		res.status(500).json({ error: 'Internal server error' });
+	}
+});
+
+// GET /api/questions/:id - Get specific question with full details
+router.get('/:id', async (req, res) => {
+	const { id } = req.params;
+
+	try {
+		const question = await prisma.question.findUnique({
+			where: { id },
+			include: {
+				author: {
+					select: {
+						id: true,
+						username: true,
+						email: true
+					}
+				},
+				tags: true,
+				answers: {
+					include: {
+						author: {
+							select: {
+								id: true,
+								username: true
+							}
+						},
+						votes: true
+					},
+					orderBy: {
+						createdAt: 'desc'
+					}
+				},
+				accepted: {
+					select: {
+						id: true
+					}
+				}
+			}
+		});
+
+		if (!question) {
+			return res.status(404).json({ error: 'Question not found' });
+		}
+
+		// Calculate vote counts for each answer
+		const questionWithVoteCounts = {
+			...question,
+			answers: question.answers.map(answer => ({
+				...answer,
+				voteCount: answer.votes.reduce((sum, vote) => sum + vote.value, 0)
+			}))
+		};
+
+		res.json(questionWithVoteCounts);
+	} catch (error) {
+		console.error('Error fetching question:', error);
 		res.status(500).json({ error: 'Internal server error' });
 	}
 });
