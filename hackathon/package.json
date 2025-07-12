@@ -11,11 +11,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/genai": "^1.9.0",
     "@prisma/client": "^6.11.1",
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
     "prisma": "^6.11.1"
   },
   "devDependencies": {
@@ -23,6 +25,7 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.13",
+    "@types/node-fetch": "^2.6.12",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
