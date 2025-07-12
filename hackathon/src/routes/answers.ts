@@ -62,7 +62,7 @@ router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: 
 
 		// Check for @mentions in the answer content and create MENTIONED notifications
 		const contentString = JSON.stringify(answer.content);
-		const mentionRegex = /@(\w+)/g;
+		const mentionRegex = /@[\w]+/g;
 		const mentions = contentString.match(mentionRegex);
 
 		if (mentions) {
@@ -78,7 +78,7 @@ router.post('/', authenticateToken, requireRole(['USER', 'ADMIN']), async (req: 
 					await prisma.notification.create({
 						data: {
 							type: 'MENTIONED',
-							message: `${answer.author.username} mentioned you in an answer to: "${answer.question.title}"`,
+							message: `You were mentioned in an answer by @${answer.author.username}`,
 							userId: mentionedUser.id
 						}
 					});

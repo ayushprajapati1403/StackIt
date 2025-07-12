@@ -26,6 +26,7 @@ model User {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   Vote          Vote[]
+  Comment       Comment[]
 }
 
 enum Role {
@@ -59,6 +60,7 @@ model Answer {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   acceptedFor Question[] @relation("AcceptedAnswer")
+  Comment     Comment[]
 }
 
 model Vote {
@@ -93,4 +95,14 @@ enum NotificationType {
   ANSWERED
   COMMENTED
   MENTIONED
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   Json
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  answer    Answer   @relation(fields: [answerId], references: [id])
+  answerId  String
+  createdAt DateTime @default(now())
 }
